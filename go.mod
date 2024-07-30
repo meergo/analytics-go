@@ -1,4 +1,4 @@
-module github.com/rudderlabs/analytics-go/v4
+module github.com/open2b/analytics-go
 
 go 1.17
 

@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
-	"github.com/rudderlabs/analytics-go/v4"
+	"github.com/open2b/analytics-go"
 )
 
 func goDotEnvVariable(key string) string {

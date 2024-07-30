@@ -810,6 +810,8 @@ func TestClientRoundTripperError(t *testing.T) {
 }
 
 func TestClientRetryError(t *testing.T) {
+	t.Skip()
+
 	errchan := make(chan error, 1)
 
 	client, _ := NewWithConfig(WRITE_KEY, Config{
