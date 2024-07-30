@@ -8,6 +8,14 @@ The Meergo Go SDK lets you send customer event data from your Go applications to
 - Set up a Go source in the dashboard.
 - Copy the write key and the data plane URL.
 
+## Running Tests
+
+From the root of this repository, run the command:
+
+```console
+go test  ./...
+```
+
 ## Installation
 
 You can install the Go SDK via the `go get` command.
