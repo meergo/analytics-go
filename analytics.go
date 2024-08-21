@@ -67,10 +67,10 @@ type client struct {
 // Instantiate a new client that uses the write key passed as first argument to
 // send messages to the backend.
 // The client is created with the default configuration.
-func New(writeKey string, dataPlaneUrl string) Client {
+func New(writeKey string, endpoint string) Client {
 	// Here we can ignore the error because the default config is always valid.
 	config := Config{
-		DataPlaneUrl: dataPlaneUrl,
+		Endpoint: endpoint,
 	}
 	c, _ := NewWithConfig(writeKey, config)
 	return c

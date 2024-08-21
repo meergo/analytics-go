@@ -22,15 +22,15 @@ func main() {
 	}
 	conf.Load(&config)
 
-	var dataPlaneUrl string
-	conf.Load(&dataPlaneUrl)
+	var endpoint string
+	conf.Load(&endpoint)
 
 	callback := callback(make(chan error, 1))
 
 	client, err := analytics.NewWithConfig(config.WriteKey, analytics.Config{
-		DataPlaneUrl: dataPlaneUrl,
-		BatchSize:    1,
-		Callback:     callback,
+		Endpoint:  endpoint,
+		BatchSize: 1,
+		Callback:  callback,
 	})
 	if err != nil {
 		fmt.Println("could not initialize analytics client", err)

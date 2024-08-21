@@ -23,16 +23,16 @@ func goDotEnvVariable(key string) string {
 func main() {
 	// create a .env file inside example directory and add the following variables.
 	WRITE_KEY := goDotEnvVariable("WRITE_KEY")
-	DATA_PLANE_URL := goDotEnvVariable("DATA_PLANE_URL")
+	ENDPOINT := goDotEnvVariable("ENDPOINT")
 	// LOCAL_DATA_PLANE_URL := goDotEnvVariable("LOCAL_DATA_PLANE_URL")
 
 	client, _ := analytics.NewWithConfig(WRITE_KEY,
 		analytics.Config{
-			DataPlaneUrl: DATA_PLANE_URL,
-			Interval:     30 * time.Second,
-			BatchSize:    100,
-			Verbose:      true,
-			DisableGzip:  false,
+			Endpoint:    ENDPOINT,
+			Interval:    30 * time.Second,
+			BatchSize:   100,
+			Verbose:     true,
+			DisableGzip: false,
 		})
 	defer client.Close()
 
