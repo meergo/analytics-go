@@ -2,17 +2,16 @@ package analytics
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -73,11 +72,11 @@ var _ Message = (*testErrorMessage)(nil)
 // tests.
 type testErrorMessage struct{}
 
-func (m testErrorMessage) Validate() error { return errorTest }
+func (m testErrorMessage) Validate() error { return testError }
 
 var (
 	// A control error returned by mock functions to emulate a failure.
-	errorTest = errors.New("test error")
+	testError = errors.New("test error")
 
 	// HTTP transport that always succeeds.
 	testTransportOK = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
@@ -87,7 +86,7 @@ var (
 			Proto:      r.Proto,
 			ProtoMajor: r.ProtoMajor,
 			ProtoMinor: r.ProtoMinor,
-			Body:       io.NopCloser(strings.NewReader("")),
+			Body:       ioutil.NopCloser(strings.NewReader("")),
 			Request:    r,
 		}, nil
 	})
@@ -106,7 +105,7 @@ var (
 			Proto:      r.Proto,
 			ProtoMajor: r.ProtoMajor,
 			ProtoMinor: r.ProtoMinor,
-			Body:       io.NopCloser(strings.NewReader("")),
+			Body:       ioutil.NopCloser(strings.NewReader("")),
 			Request:    r,
 		}, nil
 	})
@@ -119,18 +118,15 @@ var (
 			Proto:      r.Proto,
 			ProtoMajor: r.ProtoMajor,
 			ProtoMinor: r.ProtoMinor,
-			Body:       io.NopCloser(readFunc(func(b []byte) (int, error) { return 0, errorTest })),
+			Body:       ioutil.NopCloser(readFunc(func(b []byte) (int, error) { return 0, testError })),
 			Request:    r,
 		}, nil
 	})
 
 	// HTTP transport that always return an error.
 	testTransportError = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
-		return nil, errorTest
+		return nil, testError
 	})
-
-	WRITE_KEY = "WRITE_KEY"
-	ENDPOINT  = "ENDPOINT"
 )
 
 func fixture(name string) string {
@@ -139,7 +135,7 @@ func fixture(name string) string {
 		panic(err)
 	}
 	defer f.Close()
-	b, err := io.ReadAll(f)
+	b, err := ioutil.ReadAll(f)
 	if err != nil {
 		panic(err)
 	}
@@ -158,13 +154,7 @@ func mockServer() (chan []byte, *httptest.Server) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		buf := bytes.NewBuffer(nil)
-		if r.Header.Get("Content-Encoding") == "gzip" {
-			reader, _ := gzip.NewReader(r.Body)
-			defer reader.Close()
-			io.Copy(buf, reader)
-		} else {
-			io.Copy(buf, r.Body)
-		}
+		io.Copy(buf, r.Body)
 
 		var v interface{}
 		err := json.Unmarshal(buf.Bytes(), &v)
@@ -183,27 +173,11 @@ func mockServer() (chan []byte, *httptest.Server) {
 	return done, server
 }
 
-func AreEqualJSON(s1, s2 string) (bool, error) {
-	var o1 interface{}
-	var o2 interface{}
-
-	var err error
-	err = json.Unmarshal([]byte(s1), &o1)
-	if err != nil {
-		return false, fmt.Errorf("Error mashalling string 1 :: %s", err.Error())
-	}
-	err = json.Unmarshal([]byte(s2), &o2)
-	if err != nil {
-		return false, fmt.Errorf("Error mashalling string 2 :: %s", err.Error())
-	}
-
-	return reflect.DeepEqual(o1, o2), nil
-}
-
 func ExampleTrack() {
 	body, server := mockServer()
 	defer server.Close()
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+
+	client, _ := NewWithConfig("h97jamjwbh", Config{
 		Endpoint:  server.URL,
 		BatchSize: 1,
 		now:       mockTime,
@@ -212,11 +186,10 @@ func ExampleTrack() {
 	defer client.Close()
 
 	client.Enqueue(Track{
-		Event:       "Download",
-		UserId:      "123456",
-		AnonymousId: "789012",
+		Event:  "Download",
+		UserId: "123456",
 		Properties: Properties{
-			"application": "Rudder Desktop",
+			"application": "Meergo Desktop",
 			"version":     "1.1.0",
 			"platform":    "osx",
 		},
@@ -227,27 +200,26 @@ func ExampleTrack() {
 	// {
 	//   "batch": [
 	//     {
-	//       "anonymousId": "789012",
-	//       "channel": "server",
-	//       "context": {
-	//         "library": {
-	//           "name": "analytics-go",
-	//           "version": "0.0.3"
-	//         }
-	//       },
 	//       "event": "Download",
 	//       "messageId": "I'm unique",
-	//       "originalTimestamp": "2009-11-10T23:00:00Z",
 	//       "properties": {
-	//         "application": "Rudder Desktop",
+	//         "application": "Meergo Desktop",
 	//         "platform": "osx",
 	//         "version": "1.1.0"
 	//       },
-	//       "sentAt": "2009-11-10T23:00:00Z",
+	//       "timestamp": "2009-11-10T23:00:00Z",
 	//       "type": "track",
 	//       "userId": "123456"
 	//     }
-	//   ]
+	//   ],
+	//   "context": {
+	//     "library": {
+	//       "name": "analytics-go",
+	//       "version": "0.0.4"
+	//     }
+	//   },
+	//   "messageId": "I'm unique",
+	//   "sentAt": "2009-11-10T23:00:00Z"
 	// }
 }
 
@@ -263,7 +235,7 @@ func TestEnqueue(t *testing.T) {
 
 		"group": {
 			fixture("test-enqueue-group.json"),
-			Group{GroupId: "A", UserId: "B", AnonymousId: "C"},
+			Group{GroupId: "A", UserId: "B"},
 		},
 
 		"identify": {
@@ -273,22 +245,21 @@ func TestEnqueue(t *testing.T) {
 
 		"page": {
 			fixture("test-enqueue-page.json"),
-			Page{Name: "A", UserId: "B", AnonymousId: "C"},
+			Page{Name: "A", UserId: "B"},
 		},
 
 		"screen": {
 			fixture("test-enqueue-screen.json"),
-			Screen{Name: "A", UserId: "B", AnonymousId: "C"},
+			Screen{Name: "A", UserId: "B"},
 		},
 
 		"track": {
 			fixture("test-enqueue-track.json"),
 			Track{
-				Event:       "Download",
-				UserId:      "123456",
-				AnonymousId: "789012",
+				Event:  "Download",
+				UserId: "123456",
 				Properties: Properties{
-					"application": "Rudder Desktop",
+					"application": "Meergo Desktop",
 					"version":     "1.1.0",
 					"platform":    "osx",
 				},
@@ -301,7 +272,7 @@ func TestEnqueue(t *testing.T) {
 
 		"*group": {
 			fixture("test-enqueue-group.json"),
-			&Group{GroupId: "A", UserId: "B", AnonymousId: "C"},
+			&Group{GroupId: "A", UserId: "B"},
 		},
 
 		"*identify": {
@@ -311,22 +282,21 @@ func TestEnqueue(t *testing.T) {
 
 		"*page": {
 			fixture("test-enqueue-page.json"),
-			&Page{Name: "A", UserId: "B", AnonymousId: "C"},
+			&Page{Name: "A", UserId: "B"},
 		},
 
 		"*screen": {
 			fixture("test-enqueue-screen.json"),
-			&Screen{Name: "A", UserId: "B", AnonymousId: "C"},
+			&Screen{Name: "A", UserId: "B"},
 		},
 
 		"*track": {
 			fixture("test-enqueue-track.json"),
 			&Track{
-				Event:       "Download",
-				UserId:      "123456",
-				AnonymousId: "789012",
+				Event:  "Download",
+				UserId: "123456",
 				Properties: Properties{
-					"application": "Rudder Desktop",
+					"application": "Meergo Desktop",
 					"version":     "1.1.0",
 					"platform":    "osx",
 				},
@@ -337,7 +307,7 @@ func TestEnqueue(t *testing.T) {
 	body, server := mockServer()
 	defer server.Close()
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("h97jamjwbh", Config{
 		Endpoint:  server.URL,
 		Verbose:   true,
 		Logger:    t,
@@ -353,8 +323,7 @@ func TestEnqueue(t *testing.T) {
 			return
 		}
 
-		res := string(<-body)
-		if areEqual, _ := AreEqualJSON(res, test.ref); areEqual == false {
+		if res := string(<-body); res != test.ref {
 			t.Errorf("%s: invalid response:\n- expected %s\n- received: %s", name, test.ref, res)
 		}
 	}
@@ -362,14 +331,15 @@ func TestEnqueue(t *testing.T) {
 
 var _ Message = (*customMessage)(nil)
 
-type customMessage struct{}
+type customMessage struct {
+}
 
 func (c *customMessage) Validate() error {
 	return nil
 }
 
 func TestEnqueuingCustomTypeFails(t *testing.T) {
-	client := New(WRITE_KEY, ENDPOINT)
+	client := New("0123456789", "")
 	err := client.Enqueue(&customMessage{})
 
 	if err.Error() != "messages with custom types cannot be enqueued: *analytics.customMessage" {
@@ -379,14 +349,14 @@ func TestEnqueuingCustomTypeFails(t *testing.T) {
 
 func TestTrackWithInterval(t *testing.T) {
 	const interval = 100 * time.Millisecond
-	ref := fixture("test-interval-track.json")
+	var ref = fixture("test-interval-track.json")
 
 	body, server := mockServer()
 	defer server.Close()
 
 	t0 := time.Now()
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("h97jamjwbh", Config{
 		Endpoint: server.URL,
 		Interval: interval,
 		Verbose:  true,
@@ -397,19 +367,17 @@ func TestTrackWithInterval(t *testing.T) {
 	defer client.Close()
 
 	client.Enqueue(Track{
-		Event:       "Download",
-		UserId:      "123456",
-		AnonymousId: "789012",
+		Event:  "Download",
+		UserId: "123456",
 		Properties: Properties{
-			"application": "Rudder Desktop",
+			"application": "Meergo Desktop",
 			"version":     "1.1.0",
 			"platform":    "osx",
 		},
 	})
 
 	// Will flush in 100 milliseconds
-	res := string(<-body)
-	if areEqual, _ := AreEqualJSON(res, ref); areEqual == false {
+	if res := string(<-body); ref != res {
 		t.Errorf("invalid response:\n- expected %s\n- received: %s", ref, res)
 	}
 
@@ -419,12 +387,12 @@ func TestTrackWithInterval(t *testing.T) {
 }
 
 func TestTrackWithTimestamp(t *testing.T) {
-	ref := fixture("test-timestamp-track.json")
+	var ref = fixture("test-timestamp-track.json")
 
 	body, server := mockServer()
 	defer server.Close()
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("h97jamjwbh", Config{
 		Endpoint:  server.URL,
 		Verbose:   true,
 		Logger:    t,
@@ -435,99 +403,28 @@ func TestTrackWithTimestamp(t *testing.T) {
 	defer client.Close()
 
 	client.Enqueue(Track{
-		Event:       "Download",
-		UserId:      "123456",
-		AnonymousId: "789012",
+		Event:  "Download",
+		UserId: "123456",
 		Properties: Properties{
-			"application": "Rudder Desktop",
+			"application": "Meergo Desktop",
 			"version":     "1.1.0",
 			"platform":    "osx",
 		},
-		OriginalTimestamp: time.Date(2015, time.July, 10, 23, 0, 0, 0, time.UTC),
+		Timestamp: time.Date(2015, time.July, 10, 23, 0, 0, 0, time.UTC),
 	})
 
-	res := string(<-body)
-	if areEqual, _ := AreEqualJSON(res, ref); areEqual == false {
-		t.Errorf("invalid response:\n- expected %s\n- received: %s", ref, res)
-	}
-}
-
-func TestEnableGzipSupport(t *testing.T) {
-	ref := fixture("test-messageid-track.json")
-
-	body, server := mockServer()
-	defer server.Close()
-
-	client, _ := NewWithConfig(WRITE_KEY, Config{
-		Endpoint:  server.URL,
-		Verbose:   true,
-		Logger:    t,
-		BatchSize: 1,
-		now:       mockTime,
-		uid:       mockId,
-	})
-	defer client.Close()
-
-	client.Enqueue(Track{
-		Event:       "Download",
-		UserId:      "123456",
-		AnonymousId: "789012",
-		Properties: Properties{
-			"application": "Rudder Desktop",
-			"version":     "1.1.0",
-			"platform":    "osx",
-		},
-		MessageId: "abc",
-	})
-
-	res := string(<-body)
-	if areEqual, _ := AreEqualJSON(res, ref); areEqual == false {
-		t.Errorf("invalid response:\n- expected %s\n- received: %s", ref, res)
-	}
-}
-
-func TestDisableGzipSupport(t *testing.T) {
-	ref := fixture("test-messageid-track.json")
-
-	body, server := mockServer()
-	defer server.Close()
-
-	client, _ := NewWithConfig(WRITE_KEY, Config{
-		Endpoint:    server.URL,
-		Verbose:     true,
-		Logger:      t,
-		BatchSize:   1,
-		now:         mockTime,
-		uid:         mockId,
-		DisableGzip: true,
-	})
-	defer client.Close()
-
-	client.Enqueue(Track{
-		Event:       "Download",
-		UserId:      "123456",
-		AnonymousId: "789012",
-		Properties: Properties{
-			"application": "Rudder Desktop",
-			"version":     "1.1.0",
-			"platform":    "osx",
-		},
-		MessageId: "abc",
-	})
-
-	res := string(<-body)
-	if areEqual, _ := AreEqualJSON(res, ref); areEqual == false {
+	if res := string(<-body); ref != res {
 		t.Errorf("invalid response:\n- expected %s\n- received: %s", ref, res)
 	}
 }
 
 func TestTrackWithMessageId(t *testing.T) {
-	ref := fixture("test-messageid-track.json")
+	var ref = fixture("test-messageid-track.json")
 
 	body, server := mockServer()
 	defer server.Close()
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("h97jamjwbh", Config{
 		Endpoint:  server.URL,
 		Verbose:   true,
 		Logger:    t,
@@ -538,30 +435,28 @@ func TestTrackWithMessageId(t *testing.T) {
 	defer client.Close()
 
 	client.Enqueue(Track{
-		Event:       "Download",
-		UserId:      "123456",
-		AnonymousId: "789012",
+		Event:  "Download",
+		UserId: "123456",
 		Properties: Properties{
-			"application": "Rudder Desktop",
+			"application": "Meergo Desktop",
 			"version":     "1.1.0",
 			"platform":    "osx",
 		},
 		MessageId: "abc",
 	})
 
-	res := string(<-body)
-	if areEqual, _ := AreEqualJSON(res, ref); areEqual == false {
+	if res := string(<-body); ref != res {
 		t.Errorf("invalid response:\n- expected %s\n- received: %s", ref, res)
 	}
 }
 
 func TestTrackWithContext(t *testing.T) {
-	ref := fixture("test-context-track.json")
+	var ref = fixture("test-context-track.json")
 
 	body, server := mockServer()
 	defer server.Close()
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("h97jamjwbh", Config{
 		Endpoint:  server.URL,
 		Verbose:   true,
 		Logger:    t,
@@ -572,11 +467,10 @@ func TestTrackWithContext(t *testing.T) {
 	defer client.Close()
 
 	client.Enqueue(Track{
-		Event:       "Download",
-		UserId:      "123456",
-		AnonymousId: "789012",
+		Event:  "Download",
+		UserId: "123456",
 		Properties: Properties{
-			"application": "Rudder Desktop",
+			"application": "Meergo Desktop",
 			"version":     "1.1.0",
 			"platform":    "osx",
 		},
@@ -587,19 +481,18 @@ func TestTrackWithContext(t *testing.T) {
 		},
 	})
 
-	res := string(<-body)
-	if areEqual, _ := AreEqualJSON(res, ref); areEqual == false {
+	if res := string(<-body); ref != res {
 		t.Errorf("invalid response:\n- expected %s\n- received: %s", ref, res)
 	}
 }
 
 func TestTrackMany(t *testing.T) {
-	ref := fixture("test-many-track.json")
+	var ref = fixture("test-many-track.json")
 
 	body, server := mockServer()
 	defer server.Close()
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("h97jamjwbh", Config{
 		Endpoint:  server.URL,
 		Verbose:   true,
 		Logger:    t,
@@ -611,29 +504,27 @@ func TestTrackMany(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		client.Enqueue(Track{
-			Event:       "Download",
-			UserId:      "123456",
-			AnonymousId: "789012",
+			Event:  "Download",
+			UserId: "123456",
 			Properties: Properties{
-				"application": "Rudder Desktop",
+				"application": "Meergo Desktop",
 				"version":     i,
 			},
 		})
 	}
 
-	res := string(<-body)
-	if areEqual, _ := AreEqualJSON(res, ref); areEqual == false {
+	if res := string(<-body); ref != res {
 		t.Errorf("invalid response:\n- expected %s\n- received: %s", ref, res)
 	}
 }
 
 func TestTrackWithIntegrations(t *testing.T) {
-	ref := fixture("test-integrations-track.json")
+	var ref = fixture("test-integrations-track.json")
 
 	body, server := mockServer()
 	defer server.Close()
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("h97jamjwbh", Config{
 		Endpoint:  server.URL,
 		Verbose:   true,
 		Logger:    t,
@@ -644,11 +535,10 @@ func TestTrackWithIntegrations(t *testing.T) {
 	defer client.Close()
 
 	client.Enqueue(Track{
-		Event:       "Download",
-		UserId:      "123456",
-		AnonymousId: "789012",
+		Event:  "Download",
+		UserId: "123456",
 		Properties: Properties{
-			"application": "Rudder Desktop",
+			"application": "Meergo Desktop",
 			"version":     "1.1.0",
 			"platform":    "osx",
 		},
@@ -659,14 +549,13 @@ func TestTrackWithIntegrations(t *testing.T) {
 		},
 	})
 
-	res := string(<-body)
-	if areEqual, _ := AreEqualJSON(res, ref); areEqual == false {
+	if res := string(<-body); ref != res {
 		t.Errorf("invalid response:\n- expected %s\n- received: %s", ref, res)
 	}
 }
 
 func TestClientCloseTwice(t *testing.T) {
-	client := New(WRITE_KEY, ENDPOINT)
+	client := New("0123456789", "")
 
 	if err := client.Close(); err != nil {
 		t.Error("closing a client should not a return an error")
@@ -682,7 +571,7 @@ func TestClientCloseTwice(t *testing.T) {
 }
 
 func TestClientConfigError(t *testing.T) {
-	client, err := NewWithConfig(WRITE_KEY, Config{
+	client, err := NewWithConfig("0123456789", Config{
 		Interval: -1 * time.Second,
 	})
 
@@ -701,10 +590,10 @@ func TestClientConfigError(t *testing.T) {
 }
 
 func TestClientEnqueueError(t *testing.T) {
-	client := New(WRITE_KEY, ENDPOINT)
+	client := New("0123456789", "")
 	defer client.Close()
 
-	if err := client.Enqueue(testErrorMessage{}); err != errorTest {
+	if err := client.Enqueue(testErrorMessage{}); err != testError {
 		t.Error("invlaid error returned when queueing an invalid message:", err)
 	}
 }
@@ -713,7 +602,7 @@ func TestClientCallback(t *testing.T) {
 	reschan := make(chan bool, 1)
 	errchan := make(chan error, 1)
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("0123456789", Config{
 		Logger: testLogger{t.Logf, t.Logf},
 		Callback: testCallback{
 			func(m Message) { reschan <- true },
@@ -738,7 +627,7 @@ func TestClientCallback(t *testing.T) {
 func TestClientMarshalMessageError(t *testing.T) {
 	errchan := make(chan error, 1)
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("0123456789", Config{
 		Logger: testLogger{t.Logf, t.Logf},
 		Callback: testCallback{
 			nil,
@@ -758,23 +647,52 @@ func TestClientMarshalMessageError(t *testing.T) {
 
 	if err := <-errchan; err == nil {
 		t.Error("failure callback not triggered for unserializable message")
+
 	} else if _, ok := err.(*json.UnsupportedTypeError); !ok {
 		t.Errorf("invalid error type returned by unserializable message: %T", err)
+	}
+}
+
+func TestClientMarshalContextError(t *testing.T) {
+	errchan := make(chan error, 1)
+
+	client, _ := NewWithConfig("0123456789", Config{
+		Logger: testLogger{t.Logf, t.Logf},
+		Callback: testCallback{
+			nil,
+			func(m Message, e error) { errchan <- e },
+		},
+		DefaultContext: &Context{
+			// The context set on the batch message is invalid this should also
+			// cause the batched message to fail to be serialized and call the
+			// failure callback.
+			Extra: map[string]interface{}{"invalid": func() {}},
+		},
+		Transport: testTransportOK,
+	})
+
+	client.Enqueue(Track{UserId: "A", Event: "B"})
+	client.Close()
+
+	if err := <-errchan; err == nil {
+		t.Error("failure callback not triggered for unserializable context")
+
+	} else if _, ok := err.(*json.MarshalerError); !ok {
+		t.Errorf("invalid error type returned by unserializable context: %T", err)
 	}
 }
 
 func TestClientNewRequestError(t *testing.T) {
 	errchan := make(chan error, 1)
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("0123456789", Config{
 		Endpoint: "://localhost:80", // Malformed endpoint URL.
 		Logger:   testLogger{t.Logf, t.Logf},
 		Callback: testCallback{
 			nil,
 			func(m Message, e error) { errchan <- e },
 		},
-		Transport:   testTransportOK,
-		DisableGzip: true,
+		Transport: testTransportOK,
 	})
 
 	client.Enqueue(Track{UserId: "A", Event: "B"})
@@ -788,7 +706,7 @@ func TestClientNewRequestError(t *testing.T) {
 func TestClientRoundTripperError(t *testing.T) {
 	errchan := make(chan error, 1)
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("0123456789", Config{
 		Logger: testLogger{t.Logf, t.Logf},
 		Callback: testCallback{
 			nil,
@@ -802,9 +720,11 @@ func TestClientRoundTripperError(t *testing.T) {
 
 	if err := <-errchan; err == nil {
 		t.Error("failure callback not triggered for an invalid request")
+
 	} else if e, ok := err.(*url.Error); !ok {
 		t.Errorf("invalid error returned by round tripper: %T: %s", err, err)
-	} else if e.Err != errorTest {
+
+	} else if e.Err != testError {
 		t.Errorf("invalid error returned by round tripper: %T: %s", e.Err, e.Err)
 	}
 }
@@ -814,14 +734,14 @@ func TestClientRetryError(t *testing.T) {
 
 	errchan := make(chan error, 1)
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("0123456789", Config{
 		Logger: testLogger{t.Logf, t.Logf},
 		Callback: testCallback{
 			nil,
 			func(m Message, e error) { errchan <- e },
 		},
 		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
-			return nil, errorTest
+			return nil, testError
 		}),
 		BatchSize:  1,
 		RetryAfter: func(i int) time.Duration { return time.Millisecond },
@@ -835,9 +755,11 @@ func TestClientRetryError(t *testing.T) {
 
 	if err := <-errchan; err == nil {
 		t.Error("failure callback not triggered for a retry falure")
+
 	} else if e, ok := err.(*url.Error); !ok {
 		t.Errorf("invalid error returned by round tripper: %T: %s", err, err)
-	} else if e.Err != errorTest {
+
+	} else if e.Err != testError {
 		t.Errorf("invalid error returned by round tripper: %T: %s", e.Err, e.Err)
 	}
 
@@ -847,7 +769,7 @@ func TestClientRetryError(t *testing.T) {
 func TestClientResponse400(t *testing.T) {
 	errchan := make(chan error, 1)
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("0123456789", Config{
 		Logger: testLogger{t.Logf, t.Logf},
 		Callback: testCallback{
 			nil,
@@ -868,7 +790,7 @@ func TestClientResponse400(t *testing.T) {
 func TestClientResponseBodyError(t *testing.T) {
 	errchan := make(chan error, 1)
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("0123456789", Config{
 		Logger: testLogger{t.Logf, t.Logf},
 		Callback: testCallback{
 			nil,
@@ -883,7 +805,8 @@ func TestClientResponseBodyError(t *testing.T) {
 
 	if err := <-errchan; err == nil {
 		t.Error("failure callback not triggered for a 400 response")
-	} else if err != errorTest {
+
+	} else if err != testError {
 		t.Errorf("invalid error returned by erroring response body: %T: %s", err, err)
 	}
 }
@@ -892,7 +815,7 @@ func TestClientMaxConcurrentRequests(t *testing.T) {
 	reschan := make(chan bool, 1)
 	errchan := make(chan error, 1)
 
-	client, _ := NewWithConfig(WRITE_KEY, Config{
+	client, _ := NewWithConfig("0123456789", Config{
 		Logger: testLogger{t.Logf, t.Logf},
 		Callback: testCallback{
 			func(m Message) { reschan <- true },
@@ -915,6 +838,7 @@ func TestClientMaxConcurrentRequests(t *testing.T) {
 
 	if err := <-errchan; err == nil {
 		t.Error("failure callback not triggered after reaching the request limit")
+
 	} else if err != ErrTooManyRequests {
 		t.Errorf("invalid error returned by erroring response body: %T: %s", err, err)
 	}

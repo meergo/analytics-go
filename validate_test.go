@@ -8,9 +8,6 @@ import (
 var _ Message = (Event)(nil)
 var _ FieldGetter = (Event)(nil)
 
-var maxBatchBytes = 500000  // ~500 KB
-var maxMessageBytes = 32000 // ~32 KB
-
 type Event map[string]interface{}
 
 func (e Event) Validate() error {

@@ -21,16 +21,16 @@ func TestMessageQueuePushMaxBatchSize(t *testing.T) {
 	m0, _ := makeMessage(Track{
 		UserId: "1",
 		Event:  "A",
-	}, defMaxMessageBytes)
+	}, maxMessageBytes)
 
 	m1, _ := makeMessage(Track{
 		UserId: "2",
 		Event:  "A",
-	}, defMaxMessageBytes)
+	}, maxMessageBytes)
 
 	q := messageQueue{
 		maxBatchSize:  2,
-		maxBatchBytes: defMaxBatchBytes,
+		maxBatchBytes: maxBatchBytes,
 	}
 
 	if msgs := q.push(m0); msgs != nil {
@@ -46,12 +46,12 @@ func TestMessageQueuePushMaxBatchBytes(t *testing.T) {
 	m0, _ := makeMessage(Track{
 		UserId: "1",
 		Event:  "A",
-	}, defMaxMessageBytes)
+	}, maxMessageBytes)
 
 	m1, _ := makeMessage(Track{
 		UserId: "2",
 		Event:  "A",
-	}, defMaxMessageBytes)
+	}, maxMessageBytes)
 
 	q := messageQueue{
 		maxBatchSize:  100,
@@ -74,12 +74,12 @@ func TestMessageQueuePushMaxBatchBytes(t *testing.T) {
 func TestMakeMessage(t *testing.T) {
 	track := Track{UserId: "1"}
 
-	if msg, err := makeMessage(track, defMaxMessageBytes); err != nil {
+	if msg, err := makeMessage(track, maxMessageBytes); err != nil {
 		t.Error("failed to make message from track message:", err)
 
 	} else if !reflect.DeepEqual(msg, message{
 		msg:  track,
-		json: []byte(`{"userId":"1","event":"","originalTimestamp":"0001-01-01T00:00:00Z","sentAt":"0001-01-01T00:00:00Z"}`),
+		json: []byte(`{"userId":"1","event":"","timestamp":"0001-01-01T00:00:00Z"}`),
 	}) {
 		t.Error("invalid message generated from track message:", msg.msg, string(msg.json))
 	}
