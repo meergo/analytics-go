@@ -12,7 +12,6 @@ package analytics
 //			.SetRevenue(10.0)
 //			.SetCurrency("USD"),
 //	}
-//
 type Properties map[string]interface{}
 
 func NewProperties() Properties {
@@ -111,7 +110,7 @@ func (p Properties) Set(name string, value interface{}) Properties {
 // This type represents products in the E-commerce API.
 type Product struct {
 	ID    string  `json:"id,omitempty"`
-	SKU   string  `json:"sky,omitempty"`
+	SKU   string  `json:"sku,omitempty"`
 	Name  string  `json:"name,omitempty"`
 	Price float64 `json:"price"`
 }
