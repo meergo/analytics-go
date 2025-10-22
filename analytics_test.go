@@ -215,7 +215,7 @@ func ExampleTrack() {
 	//   "context": {
 	//     "library": {
 	//       "name": "analytics-go",
-	//       "version": "0.0.4"
+	//       "version": "0.0.6"
 	//     }
 	//   },
 	//   "messageId": "I'm unique",
