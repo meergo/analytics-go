@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/open2b/analytics-go"
+	"github.com/meergo/analytics-go"
 	"github.com/segmentio/conf"
 )
 

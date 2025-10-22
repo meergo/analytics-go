@@ -1,4 +1,4 @@
-module github.com/open2b/analytics-go
+module github.com/meergo/analytics-go
 
 go 1.21
 

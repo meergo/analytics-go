@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/open2b/analytics-go"
+	"github.com/meergo/analytics-go"
 )
 
 // Use your write key and endpoint.
