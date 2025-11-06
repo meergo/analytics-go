@@ -1,6 +1,6 @@
 The MIT License (MIT)
 
-Copyright (c) 2024 Open2b
+Copyright (c) 2025 Open2b
 
 Copyright (c) 2016 Segment, Inc.
 
